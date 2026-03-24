@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swarm Consensus Drone Simulation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600&display=swap');
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  :root {
+    --col-engage:  #f87171;
+    --col-monitor: #4ade80;
+    --col-observe: #60a5fa;
+    --col-relay:   #f59e0b;
+    --col-idle:    #888;
+    --bg:          #000;
+    --border:      rgba(255,255,255,0.09);
+    --panel-bg:    rgba(0,0,0,0.92);
+    --text-dim:    rgba(255,255,255,0.28);
+    --text-mid:    rgba(255,255,255,0.52);
+    --text-hi:     rgba(255,255,255,0.88);
+    --accent:      rgba(255,255,255,0.06);
+  }
+
+  html, body {
+    width:100%; height:100%; background:#000;
+    font-family: 'Share Tech Mono', monospace;
+    overflow: hidden;
+    color: #fff;
+  }
+
+  #layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr 260px 220px;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  /* ── Panel labels ── */
+  .panel-wrap {
+    position: relative;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .panel-label {
+    position: absolute;
+    top: 10px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    z-index: 20;
+    pointer-events: none;
+    white-space: nowrap;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  canvas { display: block; }
+  #sim-canvas   { width:100%; height:100%; }
+  #vec-canvas   { width:100%; height:100%; }
+
+  /* ── Data stream panel ── */
+  #data-panel {
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #data-header {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  #data-header .dh-title {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  #data-header .dh-sub {
+    font-size: 9px;
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  #data-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .dtab {
+    flex: 1;
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 6px 4px;
+    text-align: center;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    font-family: 'Share Tech Mono', monospace;
+    transition: all 0.12s;
+    border-right: 1px solid var(--border);
+  }
+  .dtab:last-child { border-right: none; }
+  .dtab.active { color: var(--text-hi); background: rgba(255,255,255,0.04); }
+  .dtab:hover { color: var(--text-mid); }
+
+  #data-stream {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 10px;
+    font-size: 9.5px;
+    line-height: 1.55;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  #data-stream::-webkit-scrollbar { width: 2px; }
+  #data-stream::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+  .ds-frame {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+  }
+  .ds-ts {
+    color: rgba(255,255,255,0.18);
+    font-size: 8px;
+    margin-bottom: 3px;
+  }
+  .ds-section { color: var(--text-dim); font-size: 8px; letter-spacing: 0.1em; margin: 4px 0 2px; }
+  .ds-row { display: flex; justify-content: space-between; color: var(--text-mid); font-size: 9px; }
+  .ds-row .k { color: rgba(255,255,255,0.32); }
+  .ds-row .v { color: var(--text-hi); }
+  .ds-row .v.engage  { color: var(--col-engage); }
+  .ds-row .v.monitor { color: var(--col-monitor); }
+  .ds-row .v.relay   { color: var(--col-relay); }
+
+  /* matrix / binary display */
+  .ds-matrix {
+    font-size: 8.5px;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.04em;
+    word-break: break-all;
+    margin: 2px 0;
+    line-height: 1.6;
+  }
+  .ds-matrix .hl { color: #fff; }
+  .ds-matrix .eng { color: var(--col-engage); }
+  .ds-matrix .mon { color: var(--col-monitor); }
+  .ds-matrix .rel { color: var(--col-relay); }
+
+  .ds-event {
+    font-size: 8.5px;
+    padding: 2px 5px;
+    margin: 2px 0;
+    background: rgba(248,113,113,0.07);
+    border-left: 2px solid var(--col-engage);
+    color: var(--col-engage);
+  }
+  .ds-event.mon { background: rgba(74,222,128,0.06); border-color: var(--col-monitor); color: var(--col-monitor); }
+
+  /* ── Control panel ── */
+  #ctrl-panel {
+    background: var(--panel-bg);
+    overflow-y: auto;
+    padding: 12px 12px 16px;
+  }
+  #ctrl-panel::-webkit-scrollbar { width: 2px; }
+  #ctrl-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+  #ctrl-panel h2 {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .stat { font-size: 10px; color: var(--text-mid); margin-bottom: 3px; font-family: 'Share Tech Mono', monospace; }
+  .stat span { color: #fff; font-weight: bold; }
+  .role-row { display:flex; align-items:center; gap:6px; font-size:10px; margin-bottom:3px; color:var(--text-mid); font-family:'Share Tech Mono',monospace; }
+  .role-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .role-row span { color:#fff; font-weight:bold; margin-right:2px; }
+
+  #drone-count-row { display:flex; align-items:center; gap:6px; margin:10px 0 5px; }
+  #drone-count-row label { font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; font-family:'Share Tech Mono',monospace; }
+  #drone-slider { flex:1; accent-color:#fff; cursor:pointer; }
+  #drone-count-val { font-size:11px; min-width:20px; text-align:right; font-family:'Share Tech Mono',monospace; }
+
+  .section-label { font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:rgba(255,255,255,0.18); margin:10px 0 5px; font-family:'Share Tech Mono',monospace; }
+  .btn-row { display:flex; flex-wrap:wrap; gap:3px; }
+  .btn {
+    font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:0.08em;
+    text-transform:uppercase; background:transparent; border:1px solid rgba(255,255,255,0.15);
+    color:rgba(255,255,255,0.45); padding:4px 7px; cursor:pointer; transition:all 0.12s;
+  }
+  .btn:hover { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.35); color:#fff; }
+  .btn.active { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.55); color:#fff; }
+
+  #conv-wrap { margin-top:8px; }
+  #conv-label { font-size:8px; text-transform:uppercase; letter-spacing:0.12em; color:var(--text-dim); margin-bottom:3px; font-family:'Share Tech Mono',monospace; }
+  #conv-bg { width:100%; height:2px; background:rgba(255,255,255,0.05); }
+  #conv-bar { height:2px; background:rgba(255,255,255,0.45); width:0%; transition:width 0.3s; }
+
+  .tune-row { display:flex; align-items:center; gap:5px; margin-bottom:4px; }
+  .tune-row label { font-size:8px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; width:52px; flex-shrink:0; font-family:'Share Tech Mono',monospace; }
+  .tune-row input[type=range] { flex:1; accent-color:#fff; cursor:pointer; height:12px; }
+  .tune-val { font-size:9px; color:var(--text-mid); min-width:28px; text-align:right; font-variant-numeric:tabular-nums; font-family:'Share Tech Mono',monospace; }
+
+  .sub-label { font-size:8px; color:rgba(255,255,255,0.18); margin:6px 0 3px; letter-spacing:0.1em; font-family:'Share Tech Mono',monospace; }
+
+  #hint { position:fixed; bottom:10px; left:8px; font-size:8px; letter-spacing:0.06em; text-transform:uppercase; color:rgba(255,255,255,0.16); pointer-events:none; font-family:'Share Tech Mono',monospace; }
+  #obs-preview { position:fixed; pointer-events:none; border:1px dashed rgba(255,255,255,0.3); display:none; }
+
+  /* vector panel legend */
+  #vec-legend {
+    position: absolute;
+    bottom: 10px; left: 10px;
+    font-size: 8px;
+    color: var(--text-dim);
+    line-height: 2;
+    pointer-events: none;
+    font-family: 'Share Tech Mono', monospace;
+    z-index: 10;
+  }
+  .leg-row { display: flex; align-items: center; gap: 6px; }
+  .leg-line { width: 18px; height: 1px; }
+</style>
+</head>
+<body>
+
+<div id="layout">
+
+  <!-- ① SIMULATION PANEL -->
+  <div class="panel-wrap" id="sim-wrap">
+    <div class="panel-label">SIMULATION</div>
+    <canvas id="sim-canvas"></canvas>
+  </div>
+
+  <!-- ② VECTOR PANEL -->
+  <div class="panel-wrap" id="vec-wrap">
+    <div class="panel-label">VECTOR FIELD</div>
+    <canvas id="vec-canvas"></canvas>
+    <div id="vec-legend">
+      <div class="leg-row"><div class="leg-line" style="background:var(--col-engage)"></div> engage</div>
+      <div class="leg-row"><div class="leg-line" style="background:var(--col-monitor)"></div> monitor</div>
+      <div class="leg-row"><div class="leg-line" style="background:var(--col-observe)"></div> observe</div>
+      <div class="leg-row"><div class="leg-line" style="background:var(--col-relay)"></div> relay</div>
+      <div class="leg-row"><div class="leg-line" style="background:rgba(255,255,255,0.35);border-top:1px dashed rgba(255,255,255,0.35)"></div> target vec</div>
+    </div>
+  </div>
+
+  <!-- ③ DATA STREAM PANEL -->
+  <div id="data-panel">
+    <div id="data-header">
+      <div class="dh-title">Data Stream</div>
+      <div class="dh-sub" id="dh-frame">T=0000 &nbsp; Δt=16ms</div>
+    </div>
+    <div id="data-tabs">
+      <button class="dtab active" data-tab="matrix" onclick="setTab('matrix')">Matrix</button>
+      <button class="dtab" data-tab="binary" onclick="setTab('binary')">Binary</button>
+      <button class="dtab" data-tab="events" onclick="setTab('events')">Events</button>
+    </div>
+    <div id="data-stream"></div>
+  </div>
+
+  <!-- ④ CONTROL PANEL -->
+  <div id="ctrl-panel">
+    <h2>Swarm Control</h2>
+    <div class="stat">Drones: <span id="s-drones">10</span></div>
+    <div class="stat">Targets: <span id="s-targets">0</span></div>
+    <div class="stat">Avg spd: <span id="s-speed">0.0</span></div>
+    <div class="stat">LOS: <span id="s-los">0</span>/<span id="s-los-total">0</span></div>
+    <div style="margin-top:8px;">
+      <div class="role-row"><div class="role-dot" style="background:#4ade80"></div><span id="s-monitor">0</span> monitor</div>
+      <div class="role-row"><div class="role-dot" style="background:#f87171"></div><span id="s-engage">0</span> engage</div>
+      <div class="role-row"><div class="role-dot" style="background:#60a5fa"></div><span id="s-observe">0</span> observe</div>
+      <div class="role-row"><div class="role-dot" style="background:#f59e0b"></div><span id="s-relay">0</span> relay ⬡</div>
+    </div>
+    <div id="drone-count-row">
+      <label>Count</label>
+      <input type="range" id="drone-slider" min="0" max="20" value="10" step="1">
+      <span id="drone-count-val">10</span>
+    </div>
+    <div id="conv-wrap">
+      <div id="conv-label">Consensus</div>
+      <div id="conv-bg"><div id="conv-bar"></div></div>
+    </div>
+
+    <div class="section-label">Swarm Mode</div>
+    <div class="btn-row">
+      <button class="btn" id="btn-engage">Engage</button>
+      <button class="btn active" id="btn-monitor">Monitor</button>
+      <button class="btn" id="btn-observe">Observe</button>
+    </div>
+    <div class="section-label">View</div>
+    <div class="btn-row">
+      <button class="btn" id="btn-reset">Reset</button>
+      <button class="btn" id="btn-clear">Clear</button>
+      <button class="btn" id="btn-sense">Sense</button>
+      <button class="btn" id="btn-edges">Edges</button>
+    </div>
+
+    <div class="section-label">Behaviour</div>
+    <div class="sub-label">CONSENSUS</div>
+    <div class="tune-row">
+      <label title="α gain">α gain</label>
+      <input type="range" id="t-alpha" min="0.001" max="0.15" step="0.001" value="0.032">
+      <span class="tune-val" id="tv-alpha">0.032</span>
+    </div>
+    <div class="sub-label">BOIDS</div>
+    <div class="tune-row">
+      <label>sep w</label>
+      <input type="range" id="t-sep" min="0" max="5" step="0.05" value="2.2">
+      <span class="tune-val" id="tv-sep">2.20</span>
+    </div>
+    <div class="tune-row">
+      <label>align w</label>
+      <input type="range" id="t-align" min="0" max="3" step="0.05" value="0.85">
+      <span class="tune-val" id="tv-align">0.85</span>
+    </div>
+    <div class="tune-row">
+      <label>coh w</label>
+      <input type="range" id="t-coh" min="0" max="3" step="0.05" value="0.65">
+      <span class="tune-val" id="tv-coh">0.65</span>
+    </div>
+    <div class="tune-row">
+      <label>sep r</label>
+      <input type="range" id="t-sepr" min="10" max="120" step="1" value="48">
+      <span class="tune-val" id="tv-sepr">48</span>
+    </div>
+    <div class="sub-label">MONITOR ORBIT</div>
+    <div class="tune-row">
+      <label>radius</label>
+      <input type="range" id="t-orb" min="30" max="220" step="2" value="100">
+      <span class="tune-val" id="tv-orb">100</span>
+    </div>
+    <div class="tune-row">
+      <label>tangent</label>
+      <input type="range" id="t-tang" min="0.001" max="0.06" step="0.001" value="0.016">
+      <span class="tune-val" id="tv-tang">0.016</span>
+    </div>
+    <div class="sub-label">ENGAGE</div>
+    <div class="tune-row">
+      <label>force</label>
+      <input type="range" id="t-engf" min="0.01" max="0.3" step="0.005" value="0.11">
+      <span class="tune-val" id="tv-engf">0.110</span>
+    </div>
+    <div class="tune-row">
+      <label>speed</label>
+      <input type="range" id="t-espd" min="0.5" max="4" step="0.05" value="1.7">
+      <span class="tune-val" id="tv-espd">1.70</span>
+    </div>
+    <div class="sub-label">NOISE</div>
+    <div class="tune-row">
+      <label>noise</label>
+      <input type="range" id="t-noise" min="0" max="0.2" step="0.002" value="0.038">
+      <span class="tune-val" id="tv-noise">0.038</span>
+    </div>
+    <div class="tune-row">
+      <label>obs rep</label>
+      <input type="range" id="t-orep" min="40" max="350" step="5" value="170">
+      <span class="tune-val" id="tv-orep">170</span>
+    </div>
+  </div>
+
+</div>
+
+<div id="hint">Left-click → target &nbsp;|&nbsp; Right-drag → obstacle &nbsp;|&nbsp; Drag obstacle to move</div>
+<div id="obs-preview"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  SWARM CONSENSUS DRONE SIMULATION — 4-Panel Layout
+//  Original simulation logic preserved exactly.
+//  Added: vector canvas + data stream panel.
+// ═══════════════════════════════════════════════════════════
+
+// ─── Canvas setup ─────────────────────────────────────────
+const simCanvas = document.getElementById('sim-canvas');
+const simCtx    = simCanvas.getContext('2d');
+const vecCanvas = document.getElementById('vec-canvas');
+const vecCtx    = vecCanvas.getContext('2d');
+
+const simWrap = document.getElementById('sim-wrap');
+const vecWrap = document.getElementById('vec-wrap');
+
+let SW, SH; // sim dimensions
+
+function resizeCanvases() {
+  SW = simWrap.clientWidth;
+  SH = simWrap.clientHeight;
+  simCanvas.width  = SW;
+  simCanvas.height = SH;
+  vecCanvas.width  = vecWrap.clientWidth;
+  vecCanvas.height = vecWrap.clientHeight;
+}
+resizeCanvases();
+window.addEventListener('resize', resizeCanvases);
+
+// Shortcuts (W/H used by sim = SW/SH)
+const W = () => SW;
+const H = () => SH;
+
+// ─── Parameters ──────────────────────────────────────────
+const CFG = {
+  sensor:            110,
+  maxSpeed:          1.2,
+  engageMaxSpeed:    1.7,
+  minSpeed:          0.32,
+  maxForce:          0.05,
+  sep_w:             2.2,
+  align_w:           0.85,
+  coh_w:             0.65,
+  sepRadius:         48,
+  alpha:             0.032,
+  noise:             0.038,
+  obstacleRepel:     68,
+  obstacleForce:     0.38,
+  engageObstacleRepel:   12,
+  engageObstacleForce:   0.7,
+  engageTangentLook:     55,
+  engageTangentForce:    0.09,
+  monitorRadius:     100,
+  monitorClearRadius:90,
+  monitorTangent:    0.016,
+  monitorRadialGain: 0.0035,
+  engageSepRadius:   32,
+  priorityBoost:     3.5,
+  observeRepel:      170,
+  observeEdge:       75,
+  engageForce:       0.11,
+  engageArrivalDist: 10,
+  engageLockForce:   0.07,
+  losEngageForce:    0.13,
+  losMonitorForce:   0.022,
+  // ── Relay
+  relayForce:        0.018,   // attraction toward bridge midpoint
+  relayDamp:         0.08,    // velocity damping when holding bridge
+  relayHysteresis:   55,      // frames connected before relay releases
+  relayFragThresh:   1.8,     // gap > sensor*this → fragmentation risk
+};
+
+const ROLE_COLOR = {
+  monitor: '#4ade80',
+  engage:  '#f87171',
+  observe: '#60a5fa',
+  relay:   '#f59e0b',
+  idle:    '#888888',
+};
+
+// ─── Global state ─────────────────────────────────────────
+let MODE      = 'monitor';
+let showSense = false;
+let showEdges = false;
+let targets   = [];
+let obstacles = [];
+let drones    = [];
+let N         = 10;
+const engageAssignments = new Map();
+
+// ── Relay state
+let relayDrone     = null;   // currently assigned relay drone (or null)
+let relayBridgePt  = null;   // {x,y} midpoint the relay is heading toward
+let relayConnectedFrames = 0; // frames the graph has been fully connected
+
+// ─── Math helpers ─────────────────────────────────────────
+const mag    = (x,y)        => Math.sqrt(x*x+y*y);
+const norm   = (x,y)        => { const m=mag(x,y); return m>0?[x/m,y/m]:[0,0]; };
+const clamp2 = (x,y,max)    => { const m=mag(x,y); return (m>max&&m>0)?[x/m*max,y/m*max]:[x,y]; };
+const dot    = (ax,ay,bx,by)=> ax*bx+ay*by;
+const dist   = (ax,ay,bx,by)=> mag(ax-bx,ay-by);
+const dist2  = (ax,ay,bx,by)=> { const dx=ax-bx,dy=ay-by; return dx*dx+dy*dy; };
+const closestOnRect = (px,py,o) => [Math.max(o.x,Math.min(px,o.x+o.w)), Math.max(o.y,Math.min(py,o.y+o.h))];
+const insideRect    = (px,py,o,m=0) => px>o.x-m&&px<o.x+o.w+m&&py>o.y-m&&py<o.y+o.h+m;
+
+function distToRect(px,py,o) {
+  const [cx,cy]=closestOnRect(px,py,o);
+  return dist(px,py,cx,cy);
+}
+function segmentHitsRect(ax,ay,bx,by,o,margin=0) {
+  const rx1=o.x-margin,ry1=o.y-margin,rx2=o.x+o.w+margin,ry2=o.y+o.h+margin;
+  const dx=bx-ax,dy=by-ay;
+  let tmin=0,tmax=1;
+  for (const [lo,hi,d,a] of [[rx1,rx2,dx,ax],[ry1,ry2,dy,ay]]) {
+    if (Math.abs(d)<1e-9){if(a<lo||a>hi)return false;continue;}
+    let t0=(lo-a)/d,t1=(hi-a)/d;
+    if (t0>t1){const tmp=t0;t0=t1;t1=tmp;}
+    tmin=Math.max(tmin,t0);tmax=Math.min(tmax,t1);
+    if(tmin>tmax)return false;
+  }
+  return true;
+}
+function pathBlocked(px,py,gx,gy,margin=4) {
+  for(const o of obstacles){if(segmentHitsRect(px,py,gx,gy,o,margin))return true;}
+  return false;
+}
+function hasLOS(ax,ay,bx,by) {
+  for(const o of obstacles){if(segmentHitsRect(ax,ay,bx,by,o,1))return false;}
+  return true;
+}
+function findLOSAngleOffset(px,py,tx,ty,orbitR) {
+  if(hasLOS(px,py,tx,ty))return 0;
+  const step=Math.PI/18;
+  for(let s=step;s<=Math.PI;s+=step){
+    for(const sign of [1,-1]){
+      const a=s*sign,cos=Math.cos(a),sin=Math.sin(a);
+      const rdx=px-tx,rdy=py-ty;
+      const nx=tx+rdx*cos-rdy*sin,ny=ty+rdx*sin+rdy*cos;
+      if(hasLOS(nx,ny,tx,ty))return a;
+    }
+  }
+  return 0;
+}
+function engageTangentSteer(drone,tx,ty) {
+  const [px,py]=drone.pos;
+  const dx=tx-px,dy=ty-py,d=mag(dx,dy);
+  if(d<1)return[0,0];
+  const look=Math.min(CFG.engageTangentLook,d);
+  const fwdX=px+(dx/d)*look,fwdY=py+(dy/d)*look;
+  let blocked=false;
+  for(const o of obstacles){if(segmentHitsRect(px,py,fwdX,fwdY,o,6)){blocked=true;break;}}
+  if(!blocked)return[0,0];
+  const rX=-dy/d,rY=dx/d,lX=dy/d,lY=-dx/d;
+  const probeR=[px+rX*look*0.5,py+rY*look*0.5];
+  const probeL=[px+lX*look*0.5,py+lY*look*0.5];
+  const dR=dist(probeR[0],probeR[1],tx,ty);
+  const dL=dist(probeL[0],probeL[1],tx,ty);
+  let scoreR=dR,scoreL=dL;
+  for(const o of obstacles){
+    if(segmentHitsRect(px,py,probeR[0],probeR[1],o,6))scoreR+=9999;
+    if(segmentHitsRect(px,py,probeL[0],probeL[1],o,6))scoreL+=9999;
+  }
+  return scoreR<=scoreL?[rX*CFG.engageTangentForce,rY*CFG.engageTangentForce]
+                       :[lX*CFG.engageTangentForce,lY*CFG.engageTangentForce];
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RELAY SYSTEM — emergent bridge drone logic
+//
+//  Each frame:
+//  1. BFS from drone[0] over the neighbor graph → find connected components
+//  2. If >1 component: find the closest cross-component pair (i,j)
+//  3. Bridge midpoint M = midpoint(i.pos, j.pos)
+//  4. Score every non-engage non-locked drone as relay candidate:
+//       cost = dist(drone, M)  [smallest = best]
+//  5. Assign relay to winner; strip relay from others
+//  6. Hysteresis: once connected for relayHysteresis frames → clear relay
+//
+//  The relay drone moves toward M using a soft spring force overlaid
+//  on top of its normal role behavior. This lets it keep functioning
+//  (orbiting, observing) while drifting toward the gap.
+// ═══════════════════════════════════════════════════════════
+
+// BFS → returns array of component arrays (each component = array of drones)
+function graphComponents(allDrones){
+  const visited = new Set();
+  const components = [];
+  for(const start of allDrones){
+    if(visited.has(start)) continue;
+    const comp = [];
+    const queue = [start];
+    visited.add(start);
+    while(queue.length){
+      const cur = queue.shift();
+      comp.push(cur);
+      for(const nb of cur.neighbors){
+        if(!visited.has(nb)){visited.add(nb);queue.push(nb);}
+      }
+    }
+    components.push(comp);
+  }
+  return components;
+}
+
+// Find the closest pair of drones from two different components
+// Returns {a, b, midX, midY, gap}
+function closestCrossPair(compA, compB){
+  let best=null, bestD=Infinity;
+  for(const a of compA){
+    for(const b of compB){
+      const d=dist(...a.pos,...b.pos);
+      if(d<bestD){bestD=d;best={a,b,midX:(a.pos[0]+b.pos[0])/2,midY:(a.pos[1]+b.pos[1])/2,gap:d};}
+    }
+  }
+  return best;
+}
+
+// Centroid of a set of drones
+function centroid(drones){
+  if(!drones.length) return [0,0];
+  let cx=0,cy=0;
+  for(const d of drones){cx+=d.pos[0];cy+=d.pos[1];}
+  return [cx/drones.length, cy/drones.length];
+}
+
+// ── Main relay assignment (called once per frame, after findNeighbors)
+function updateRelayAssignment(){
+  if(drones.length < 3){ clearRelay(); return; }
+
+  const comps = graphComponents(drones);
+
+  // Graph is fully connected → count toward hysteresis release
+  if(comps.length === 1){
+    relayConnectedFrames++;
+    if(relayConnectedFrames >= CFG.relayHysteresis){
+      clearRelay();
+    }
+    // While hysteresis counting, keep the relay drone steering to its point
+    // (bridge point becomes null only once fully cleared)
+    return;
+  }
+
+  // Graph is fragmented → reset hysteresis counter
+  relayConnectedFrames = 0;
+
+  // Find the two largest components and their closest cross pair
+  const sorted = comps.slice().sort((a,b)=>b.length-a.length);
+  const pair = closestCrossPair(sorted[0], sorted[1]);
+  if(!pair) return;
+
+  relayBridgePt = {x: pair.midX, y: pair.midY};
+
+  // Score every drone as relay candidate:
+  // - Must not be engage+active or locked
+  // - Score = distance to bridge midpoint (lower = better)
+  let bestCandidate = null, bestScore = Infinity;
+  for(const d of drones){
+    if(d.role==='engage' && !d.locked) continue; // don't pull active engage drones
+    const score = dist(d.pos[0], d.pos[1], pair.midX, pair.midY);
+    if(score < bestScore){ bestScore=score; bestCandidate=d; }
+  }
+
+  if(!bestCandidate) return;
+
+  // If same drone — no change needed
+  if(relayDrone === bestCandidate) return;
+
+  // Swap relay assignment
+  if(relayDrone && relayDrone !== bestCandidate) relayDrone.isRelay = false;
+  relayDrone = bestCandidate;
+  relayDrone.isRelay = true;
+
+  // Mark all others as non-relay
+  for(const d of drones) if(d!==relayDrone) d.isRelay=false;
+}
+
+function clearRelay(){
+  if(relayDrone) relayDrone.isRelay = false;
+  relayDrone = null;
+  relayBridgePt = null;
+  relayConnectedFrames = 0;
+  for(const d of drones) d.isRelay = false;
+}
+
+
+class Drone {
+  constructor() {
+    this.pos   = [Math.random()*SW, Math.random()*SH];
+    const a    = Math.random()*Math.PI*2;
+    this.vel   = [Math.cos(a)*0.7, Math.sin(a)*0.7];
+    this.acc   = [0,0];
+    this.state = Math.random();
+    this.neighbors      = [];
+    this.role           = 'idle';
+    this.assignedTarget = null;
+    this.locked         = false;
+    this.hasLOS         = false;
+    this.isRelay        = false;   // emergent relay overlay flag
+    this.id             = Drone._id = (Drone._id||0)+1;
+  }
+  resetEngageState(){ this.locked=false; }
+
+  findNeighbors(all){
+    this.neighbors=[];
+    const r2=CFG.sensor*CFG.sensor;
+    for(const d of all) if(d!==this&&dist2(...this.pos,...d.pos)<r2) this.neighbors.push(d);
+  }
+  consensus(){
+    let delta=0;
+    for(const n of this.neighbors) delta+=(n.state-this.state);
+    this.state=Math.max(0,Math.min(1,this.state+CFG.alpha*delta));
+  }
+  separation(){
+    const isEngage=this.role==='engage';
+    const sepR=isEngage?CFG.engageSepRadius:CFG.sepRadius;
+    let sx=0,sy=0;
+    for(const n of this.neighbors){
+      const dx=this.pos[0]-n.pos[0],dy=this.pos[1]-n.pos[1],d=mag(dx,dy);
+      const boost=(!isEngage&&n.role==='engage'&&n.assignedTarget===this.assignedTarget)?CFG.priorityBoost:1;
+      if(d>0&&d<sepR){sx+=(dx/(d*d))*boost;sy+=(dy/(d*d))*boost;}
+    }
+    if(sx||sy){
+      const [nx,ny]=norm(sx,sy);
+      const [fx,fy]=clamp2(nx*CFG.maxSpeed-this.vel[0],ny*CFG.maxSpeed-this.vel[1],CFG.maxForce*1.6);
+      this.acc[0]+=fx*CFG.sep_w; this.acc[1]+=fy*CFG.sep_w;
+    }
+  }
+  flockWith(members){
+    if(!members.length)return;
+    let ax=0,ay=0,cx=0,cy=0;
+    for(const n of members){ax+=n.vel[0];ay+=n.vel[1];cx+=n.pos[0];cy+=n.pos[1];}
+    const sc=members.length; ax/=sc;ay/=sc;cx/=sc;cy/=sc;
+    const am=mag(ax,ay);
+    if(am>0){const[fx,fy]=clamp2(ax/am*CFG.maxSpeed-this.vel[0],ay/am*CFG.maxSpeed-this.vel[1],CFG.maxForce);this.acc[0]+=fx*CFG.align_w;this.acc[1]+=fy*CFG.align_w;}
+    const cdx=cx-this.pos[0],cdy=cy-this.pos[1],cm=mag(cdx,cdy);
+    if(cm>0){const[fx,fy]=clamp2(cdx/cm*CFG.maxSpeed-this.vel[0],cdy/cm*CFG.maxSpeed-this.vel[1],CFG.maxForce);this.acc[0]+=fx*CFG.coh_w;this.acc[1]+=fy*CFG.coh_w;}
+  }
+  orbitTarget(t){
+    const dx=this.pos[0]-t.x,dy=this.pos[1]-t.y,d=mag(dx,dy);
+    if(d<1)return;
+    const engaged=engageAssignments.get(t);
+    const lockActive=engaged&&engaged.locked;
+    const R=lockActive?CFG.monitorClearRadius:CFG.monitorRadius;
+    const [rx,ry]=norm(dx,dy);
+    const radialErr=d-R;
+    this.acc[0]-=rx*radialErr*CFG.monitorRadialGain;
+    this.acc[1]-=ry*radialErr*CFG.monitorRadialGain;
+    this.acc[0]+=-ry*CFG.monitorTangent;
+    this.acc[1]+=rx*CFG.monitorTangent;
+  }
+  engageTarget(t){
+    const dx=t.x-this.pos[0],dy=t.y-this.pos[1],d=dist(t.x,t.y,...this.pos);
+    if(d<=CFG.engageArrivalDist){
+      this.locked=true;
+      this.acc[0]-=this.vel[0]*0.38; this.acc[1]-=this.vel[1]*0.38;
+      this.acc[0]+=dx*CFG.engageLockForce; this.acc[1]+=dy*CFG.engageLockForce;
+      return;
+    }
+    this.locked=false;
+    const f=Math.min(CFG.engageForce,Math.max(0.045,d*0.006));
+    this.acc[0]+=(dx/d)*f; this.acc[1]+=(dy/d)*f;
+    const [stx,sty]=engageTangentSteer(this,t.x,t.y);
+    this.acc[0]+=stx; this.acc[1]+=sty;
+    const lateralX=this.vel[0]-dot(this.vel[0],this.vel[1],dx/d,dy/d)*(dx/d);
+    const lateralY=this.vel[1]-dot(this.vel[0],this.vel[1],dx/d,dy/d)*(dy/d);
+    this.acc[0]-=lateralX*0.06; this.acc[1]-=lateralY*0.06;
+  }
+  spreadOut(){
+    for(const n of drones){
+      if(n===this)continue;
+      const dx=this.pos[0]-n.pos[0],dy=this.pos[1]-n.pos[1],d=mag(dx,dy);
+      if(d<CFG.observeRepel&&d>0){const f=(CFG.observeRepel-d)/CFG.observeRepel;this.acc[0]+=(dx/d)*f*0.11;this.acc[1]+=(dy/d)*f*0.11;}
+    }
+    const m=CFG.observeEdge;
+    if(this.pos[0]<m)   this.acc[0]+=(m-this.pos[0])*0.002;
+    if(this.pos[0]>SW-m) this.acc[0]-=(this.pos[0]-(SW-m))*0.002;
+    if(this.pos[1]<m)   this.acc[1]+=(m-this.pos[1])*0.002;
+    if(this.pos[1]>SH-m) this.acc[1]-=(this.pos[1]-(SH-m))*0.002;
+    this.acc[0]+=(Math.random()-0.5)*CFG.noise*1.4;
+    this.acc[1]+=(Math.random()-0.5)*CFG.noise*1.4;
+  }
+  seekLOS(t){
+    if(this.locked)return;
+    if(hasLOS(this.pos[0],this.pos[1],t.x,t.y)){this.hasLOS=true;return;}
+    this.hasLOS=false;
+    const dx=t.x-this.pos[0],dy=t.y-this.pos[1],d=mag(dx,dy);
+    if(d<1)return;
+    const step=Math.PI/12;
+    let bestAngle=null,bestCost=Infinity;
+    for(let s=step;s<=Math.PI;s+=step){
+      for(const sign of [1,-1]){
+        const a=s*sign,cos=Math.cos(a),sin=Math.sin(a);
+        const ndx=dx*cos-dy*sin,ndy=dx*sin+dy*cos,nm=mag(ndx,ndy);
+        const probeX=this.pos[0]+(ndx/nm)*Math.min(d,60);
+        const probeY=this.pos[1]+(ndy/nm)*Math.min(d,60);
+        if(hasLOS(probeX,probeY,t.x,t.y)){
+          const cost=Math.abs(a);
+          if(cost<bestCost){bestCost=cost;bestAngle=a;}
+          break;
+        }
+      }
+    }
+    if(bestAngle!==null){
+      const sideX=bestAngle>0?-dy/d:dy/d;
+      const sideY=bestAngle>0?dx/d:-dx/d;
+      this.acc[0]+=sideX*CFG.losEngageForce;
+      this.acc[1]+=sideY*CFG.losEngageForce;
+    }
+  }
+  orbitForLOS(t){
+    if(hasLOS(this.pos[0],this.pos[1],t.x,t.y)){this.hasLOS=true;return;}
+    this.hasLOS=false;
+    const angleOffset=findLOSAngleOffset(this.pos[0],this.pos[1],t.x,t.y,CFG.monitorRadius);
+    if(angleOffset===0)return;
+    const reverseTangent=angleOffset<0;
+    const dx=this.pos[0]-t.x,dy=this.pos[1]-t.y,d=mag(dx,dy);
+    if(d<1)return;
+    const [rx,ry]=[dx/d,dy/d];
+    const tSign=reverseTangent?-1:1;
+    this.acc[0]+=(-ry*tSign)*CFG.losMonitorForce;
+    this.acc[1]+=(rx*tSign)*CFG.losMonitorForce;
+  }
+  avoidObstacles(){
+    const isEngageMoving=this.role==='engage'&&!this.locked;
+    const repel=isEngageMoving?CFG.engageObstacleRepel:CFG.obstacleRepel;
+    const force=isEngageMoving?CFG.engageObstacleForce:CFG.obstacleForce;
+    for(const o of obstacles){
+      const [cx,cy]=closestOnRect(this.pos[0],this.pos[1],o);
+      const dx=this.pos[0]-cx,dy=this.pos[1]-cy,d=mag(dx,dy);
+      if(d<repel&&d>0){const f=(repel-d)/repel;this.acc[0]+=(dx/d)*f*force;this.acc[1]+=(dy/d)*f*force;}
+    }
+  }
+  wander(){
+    this.acc[0]+=(Math.random()-0.5)*CFG.noise*2;
+    this.acc[1]+=(Math.random()-0.5)*CFG.noise*2;
+  }
+  // ── Relay steering: soft spring toward bridge midpoint ────
+  // Overlaid on normal behavior — doesn't replace role logic.
+  relaySteer(){
+    if(!this.isRelay || !relayBridgePt) return;
+    const dx = relayBridgePt.x - this.pos[0];
+    const dy = relayBridgePt.y - this.pos[1];
+    const d  = mag(dx, dy);
+    if(d < 8){
+      // Arrived at bridge point — damp velocity to hover
+      this.acc[0] -= this.vel[0] * CFG.relayDamp;
+      this.acc[1] -= this.vel[1] * CFG.relayDamp;
+      return;
+    }
+    // Spring force toward bridge point, scaled by distance
+    const f = Math.min(CFG.relayForce, d * 0.0012);
+    this.acc[0] += (dx/d) * f;
+    this.acc[1] += (dy/d) * f;
+  }
+
+  integrate(){
+    this.vel[0]+=this.acc[0]; this.vel[1]+=this.acc[1];
+    const top=(this.role==='engage'&&!this.locked)?CFG.engageMaxSpeed:CFG.maxSpeed;
+    const s=mag(this.vel[0],this.vel[1]);
+    if(s>top){this.vel[0]=this.vel[0]/s*top;this.vel[1]=this.vel[1]/s*top;}
+    if(!this.locked&&s>0&&s<CFG.minSpeed){this.vel[0]=this.vel[0]/s*CFG.minSpeed;this.vel[1]=this.vel[1]/s*CFG.minSpeed;}
+    this.pos[0]=(this.pos[0]+this.vel[0]+SW)%SW;
+    this.pos[1]=(this.pos[1]+this.vel[1]+SH)%SH;
+    this.acc[0]=0;this.acc[1]=0;
+  }
+
+  draw(ctx){
+    const angle=Math.atan2(this.vel[1],this.vel[0])+Math.PI/2;
+    // Relay drones draw as a diamond shape instead of triangle
+    const isRelayDraw = this.isRelay;
+    const sz = isRelayDraw ? 9 : (this.role==='engage'?8.5:7.5);
+    const cos=Math.cos(angle),sin=Math.sin(angle);
+
+    // Use relay amber color if relay flag set, else normal role color
+    const color = isRelayDraw ? '#f59e0b' : (ROLE_COLOR[this.role]||'#fff');
+
+    if(isRelayDraw){
+      // Diamond shape: 4 points rotated by heading
+      const pts=[
+        [0,-sz*1.5],[sz*0.5,0],[-sz*0.5,0]
+      ].map(([px,py])=>[
+        this.pos[0]+cos*px-sin*py,
+        this.pos[1]+sin*px+cos*py,
+      ]);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+      ctx.closePath();
+      ctx.globalAlpha=0.18; ctx.fillStyle=color; ctx.fill();
+      ctx.globalAlpha=1; ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.stroke();
+
+      // Amber pulsing glow ring
+      const p=(Date.now()%900)/900;
+      ctx.beginPath(); ctx.arc(this.pos[0],this.pos[1],11+p*10,0,Math.PI*2);
+      ctx.strokeStyle=color; ctx.globalAlpha=0.35*(1-p); ctx.lineWidth=1.2; ctx.stroke();
+      ctx.globalAlpha=1;
+
+      // Bridge line to bridge point
+      if(relayBridgePt){
+        ctx.beginPath(); ctx.moveTo(this.pos[0],this.pos[1]);
+        ctx.lineTo(relayBridgePt.x, relayBridgePt.y);
+        ctx.strokeStyle='rgba(245,158,11,0.25)'; ctx.lineWidth=0.7;
+        ctx.setLineDash([4,6]); ctx.stroke(); ctx.setLineDash([]);
+        // Bridge midpoint marker
+        ctx.beginPath(); ctx.arc(relayBridgePt.x, relayBridgePt.y, 4, 0, Math.PI*2);
+        ctx.strokeStyle='rgba(245,158,11,0.6)'; ctx.lineWidth=1; ctx.stroke();
+      }
+    } else {
+      const pts=[[0,-sz],[-sz*0.55,sz*0.8],[sz*0.55,sz*0.8]].map(([px,py])=>[
+        this.pos[0]+cos*px-sin*py,
+        this.pos[1]+sin*px+cos*py,
+      ]);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0],pts[0][1]);
+      ctx.lineTo(pts[1][0],pts[1][1]);
+      ctx.lineTo(pts[2][0],pts[2][1]);
+      ctx.closePath();
+      ctx.globalAlpha=this.locked?0.5:0.12;
+      ctx.fillStyle=color; ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.strokeStyle=color;
+      ctx.lineWidth=this.role==='engage'?1.3:1;
+      ctx.stroke();
+      if(this.locked){
+        const p=(Date.now()%800)/800;
+        ctx.beginPath();ctx.arc(this.pos[0],this.pos[1],10+p*14,0,Math.PI*2);
+        ctx.strokeStyle=color;ctx.globalAlpha=0.4*(1-p);ctx.lineWidth=1;ctx.stroke();ctx.globalAlpha=1;
+      }
+    }
+
+    if(showSense){
+      ctx.beginPath();ctx.arc(this.pos[0],this.pos[1],CFG.sensor,0,Math.PI*2);
+      ctx.strokeStyle=color;ctx.globalAlpha=0.06;ctx.lineWidth=0.5;ctx.stroke();ctx.globalAlpha=1;
+    }
+    if(this.assignedTarget&&(this.role==='monitor'||this.role==='engage')&&!this.locked){
+      const t=this.assignedTarget;
+      const los=hasLOS(this.pos[0],this.pos[1],t.x,t.y);
+      if(los){
+        ctx.beginPath();ctx.moveTo(this.pos[0],this.pos[1]);ctx.lineTo(t.x,t.y);
+        ctx.strokeStyle=color;ctx.globalAlpha=this.role==='engage'?0.2:0.08;
+        ctx.lineWidth=0.5;ctx.setLineDash([]);ctx.stroke();ctx.globalAlpha=1;
+      } else {
+        const dx=t.x-this.pos[0],dy=t.y-this.pos[1],d=mag(dx,dy);
+        const stubLen=Math.min(30,d*0.3);
+        ctx.beginPath();ctx.moveTo(this.pos[0],this.pos[1]);
+        ctx.lineTo(this.pos[0]+(dx/d)*stubLen,this.pos[1]+(dy/d)*stubLen);
+        ctx.strokeStyle=color;ctx.globalAlpha=0.18;ctx.lineWidth=0.5;
+        ctx.setLineDash([3,5]);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+      }
+    }
+  }
+}
+
+// ─── Init ─────────────────────────────────────────────────
+function initDrones(n){
+  const old=drones.slice();drones=[];
+  for(let i=0;i<n;i++){
+    if(i<old.length){old[i].role='idle';old[i].assignedTarget=null;old[i].resetEngageState();drones.push(old[i]);}
+    else drones.push(new Drone());
+  }
+  engageAssignments.clear();
+}
+function resetObstacles(){
+  obstacles=[
+    {x:SW*0.28-8, y:SH*0.18,  w:16,  h:170},
+    {x:SW*0.52,   y:SH*0.58,  w:160, h:16},
+    {x:SW*0.72,   y:SH*0.14,  w:16,  h:130},
+  ];
+}
+resetObstacles();
+initDrones(N);
+
+// ─── Role assignment ──────────────────────────────────────
+function assignRoles(){
+  if(MODE==='observe'){
+    for(const d of drones){d.role='observe';d.assignedTarget=null;d.resetEngageState();}
+    engageAssignments.clear();return;
+  }
+  for(const d of drones){d.role='monitor';d.assignedTarget=null;}
+  if(!targets.length){engageAssignments.clear();return;}
+  if(MODE==='engage'){
+    for(const [t,d] of engageAssignments){
+      if(!targets.includes(t)||!drones.includes(d)){d.resetEngageState();engageAssignments.delete(t);}
+    }
+    for(const [t,d] of engageAssignments){
+      if(d.locked)continue;
+      if(hasLOS(d.pos[0],d.pos[1],t.x,t.y))continue;
+      let bestLOS=null,bestD=Infinity;
+      for(const od of drones){
+        if(od===d||[...engageAssignments.values()].includes(od))continue;
+        if(!hasLOS(od.pos[0],od.pos[1],t.x,t.y))continue;
+        const dd=dist2(...od.pos,t.x,t.y);
+        if(dd<bestD){bestD=dd;bestLOS=od;}
+      }
+      if(bestLOS){d.resetEngageState();bestLOS.resetEngageState();engageAssignments.set(t,bestLOS);}
+    }
+    const assignedSet=new Set(engageAssignments.values());
+    for(const t of targets){
+      if(engageAssignments.has(t))continue;
+      let bestLOS=null,bestLOSD=Infinity,bestAny=null,bestAnyD=Infinity;
+      for(const d of drones){
+        if(assignedSet.has(d))continue;
+        const dd=dist2(...d.pos,t.x,t.y);
+        if(hasLOS(d.pos[0],d.pos[1],t.x,t.y)){if(dd<bestLOSD){bestLOSD=dd;bestLOS=d;}}
+        if(dd<bestAnyD){bestAnyD=dd;bestAny=d;}
+      }
+      const best=bestLOS||bestAny;
+      if(best){best.resetEngageState();engageAssignments.set(t,best);assignedSet.add(best);}
+    }
+    for(const [t,d] of engageAssignments){d.role='engage';d.assignedTarget=t;}
+    for(const d of drones){
+      if(d.role==='engage')continue;
+      d.role='monitor';
+      let bt=null,bd=Infinity;
+      for(const t of targets){const dd=dist2(...d.pos,t.x,t.y);if(dd<bd){bd=dd;bt=t;}}
+      d.assignedTarget=bt;
+    }
+  } else {
+    engageAssignments.clear();
+    for(const d of drones)d.resetEngageState();
+    drones.forEach((d,i)=>{d.role='monitor';d.assignedTarget=targets[i%targets.length];});
+  }
+}
+
+// ─── Simulation step ──────────────────────────────────────
+function update(){
+  assignRoles();
+  for(const d of drones)d.findNeighbors(drones);
+
+  // Relay assignment runs after neighbors are computed (needs neighbor graph)
+  updateRelayAssignment();
+
+  for(const d of drones){
+    d.consensus();d.separation();
+    if(d.role==='engage'&&d.assignedTarget){
+      d.engageTarget(d.assignedTarget);d.seekLOS(d.assignedTarget);
+    } else if(d.role==='monitor'){
+      if(d.assignedTarget){d.orbitTarget(d.assignedTarget);d.orbitForLOS(d.assignedTarget);}
+      d.flockWith(d.neighbors.filter(n=>n.role==='monitor').slice(0,4));
+      if(!d.assignedTarget)d.wander();
+    } else if(d.role==='observe'){
+      d.spreadOut();
+    } else {
+      d.flockWith(d.neighbors);d.wander();
+    }
+    d.relaySteer();   // relay overlay: biases movement toward bridge point
+    d.avoidObstacles();d.integrate();
+  }
+}
+
+// ─── SIMULATION RENDER ───────────────────────────────────
+function renderSim(){
+  const ctx=simCtx;
+  ctx.clearRect(0,0,SW,SH);
+  ctx.fillStyle='#000';ctx.fillRect(0,0,SW,SH);
+  ctx.strokeStyle='rgba(255,255,255,0.019)';ctx.lineWidth=0.5;
+  for(let x=0;x<SW;x+=80){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,SH);ctx.stroke();}
+  for(let y=0;y<SH;y+=80){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(SW,y);ctx.stroke();}
+  if(showEdges){
+    for(const d of drones){
+      for(const n of d.neighbors){
+        if(n<=d)continue;
+        ctx.beginPath();ctx.moveTo(d.pos[0],d.pos[1]);ctx.lineTo(n.pos[0],n.pos[1]);
+        ctx.strokeStyle=ROLE_COLOR[d.role]||'#fff';ctx.globalAlpha=0.1;ctx.lineWidth=0.5;ctx.stroke();ctx.globalAlpha=1;
+      }
+    }
+  }
+  for(const o of obstacles){
+    ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fillRect(o.x,o.y,o.w,o.h);
+    ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=0.8;ctx.strokeRect(o.x,o.y,o.w,o.h);
+    const tk=5;ctx.strokeStyle='rgba(255,255,255,0.52)';ctx.lineWidth=1;
+    [[o.x,o.y],[o.x+o.w,o.y],[o.x,o.y+o.h],[o.x+o.w,o.y+o.h]].forEach(([cx,cy])=>{
+      ctx.beginPath();ctx.moveTo(cx,cy-tk);ctx.lineTo(cx,cy+tk);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(cx-tk,cy);ctx.lineTo(cx+tk,cy);ctx.stroke();
+    });
+  }
+  const now=Date.now();
+  for(const t of targets){
+    const pulse=(now%1400)/1400;
+    const engaged=engageAssignments.get(t);
+    const isLocked=engaged&&engaged.locked;
+    const isEngage=MODE==='engage';
+    const tColor=isEngage?'#f87171':'rgba(255,255,255,0.85)';
+    const ringColor=isEngage?'rgba(248,113,113,0.09)':'rgba(74,222,128,0.07)';
+    ctx.beginPath();ctx.arc(t.x,t.y,isLocked?CFG.monitorClearRadius:CFG.monitorRadius,0,Math.PI*2);
+    ctx.strokeStyle=ringColor;ctx.lineWidth=1;ctx.stroke();
+    ctx.beginPath();ctx.arc(t.x,t.y,16+pulse*30,0,Math.PI*2);
+    ctx.strokeStyle=isLocked?`rgba(248,113,113,${0.45*(1-pulse)})`:` rgba(255,255,255,${0.16*(1-pulse)})`;
+    ctx.lineWidth=0.8;ctx.stroke();
+    if(isLocked){ctx.beginPath();ctx.arc(t.x,t.y,12,0,Math.PI*2);ctx.strokeStyle='rgba(248,113,113,0.55)';ctx.lineWidth=1.5;ctx.stroke();}
+    const ts=10;
+    ctx.strokeStyle=tColor;ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.moveTo(t.x-ts,t.y-ts);ctx.lineTo(t.x+ts,t.y+ts);ctx.moveTo(t.x+ts,t.y-ts);ctx.lineTo(t.x-ts,t.y+ts);ctx.stroke();
+    ctx.beginPath();ctx.arc(t.x,t.y,2.5,0,Math.PI*2);ctx.fillStyle=tColor;ctx.fill();
+    if(engaged&&!engaged.locked){
+      ctx.beginPath();ctx.moveTo(engaged.pos[0],engaged.pos[1]);ctx.lineTo(t.x,t.y);
+      ctx.strokeStyle='rgba(248,113,113,0.28)';ctx.lineWidth=0.7;
+      ctx.setLineDash([4,7]);ctx.stroke();ctx.setLineDash([]);
+    }
+  }
+  for(const d of drones)d.draw(ctx);
+}
+
+// ─── VECTOR PANEL RENDER ─────────────────────────────────
+// Arrow helper: draws a clean arrow with head at (ex,ey)
+function drawArrow(ctx, sx, sy, ex, ey, color, alpha, lineW) {
+  const dx=ex-sx, dy=ey-sy, len=mag(dx,dy);
+  if(len<2)return;
+  ctx.save();
+  ctx.strokeStyle=color; ctx.fillStyle=color;
+  ctx.globalAlpha=alpha; ctx.lineWidth=lineW;
+  ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+  // arrowhead
+  const headLen=Math.min(8, len*0.35);
+  const angle=Math.atan2(dy,dx);
+  ctx.beginPath();
+  ctx.moveTo(ex,ey);
+  ctx.lineTo(ex-headLen*Math.cos(angle-0.42), ey-headLen*Math.sin(angle-0.42));
+  ctx.lineTo(ex-headLen*Math.cos(angle+0.42), ey-headLen*Math.sin(angle+0.42));
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// Scale velocity to pixel length on the vector canvas
+const VEL_SCALE  = 38; // px per unit velocity
+const PROX_RANGE = 120; // pixel distance to show target vector
+
+function renderVec(){
+  const vw=vecCanvas.width, vh=vecCanvas.height;
+  const ctx=vecCtx;
+  ctx.clearRect(0,0,vw,vh);
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,vw,vh);
+
+  // Subtle grid
+  ctx.strokeStyle='rgba(255,255,255,0.018)'; ctx.lineWidth=0.5;
+  for(let x=0;x<vw;x+=80){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,vh);ctx.stroke();}
+  for(let y=0;y<vh;y+=80){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(vw,y);ctx.stroke();}
+
+  // Scale factors: sim coords → vec canvas coords
+  const sx=vw/SW, sy=vh/SH;
+
+  // Draw obstacles (ghost)
+  for(const o of obstacles){
+    ctx.fillStyle='rgba(255,255,255,0.025)'; ctx.fillRect(o.x*sx,o.y*sy,o.w*sx,o.h*sy);
+    ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=0.6; ctx.strokeRect(o.x*sx,o.y*sy,o.w*sx,o.h*sy);
+  }
+
+  // Draw targets (small cross)
+  for(const t of targets){
+    const tx=t.x*sx, ty=t.y*sy;
+    const ts=7;
+    ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(tx-ts,ty-ts); ctx.lineTo(tx+ts,ty+ts);
+    ctx.moveTo(tx+ts,ty-ts); ctx.lineTo(tx-ts,ty+ts); ctx.stroke();
+    // orbit ring
+    ctx.beginPath(); ctx.arc(tx,ty,CFG.monitorRadius*Math.min(sx,sy),0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=0.5; ctx.stroke();
+  }
+
+  // Draw drones: velocity vector + optional target vector
+  for(const d of drones){
+    const px=d.pos[0]*sx, py=d.pos[1]*sy;
+    const isRelayDraw = d.isRelay;
+    const color = isRelayDraw ? '#f59e0b' : (ROLE_COLOR[d.role]||'#888');
+    const speed=mag(d.vel[0],d.vel[1]);
+    const vecLen=speed*VEL_SCALE;
+
+    // ── Velocity arrow
+    const heading=Math.atan2(d.vel[1],d.vel[0]);
+    const vex=px+Math.cos(heading)*vecLen;
+    const vey=py+Math.sin(heading)*vecLen;
+    const arrowW = isRelayDraw ? 1.8 : (d.role==='engage'?1.4:1.0);
+    drawArrow(ctx, px, py, vex, vey, color, d.locked?0.35:0.85, arrowW);
+
+    // ── Origin dot — diamond for relay, circle for others
+    if(isRelayDraw){
+      // Diamond marker
+      const ds=5;
+      ctx.beginPath();
+      ctx.moveTo(px, py-ds); ctx.lineTo(px+ds, py);
+      ctx.lineTo(px, py+ds); ctx.lineTo(px-ds, py);
+      ctx.closePath();
+      ctx.fillStyle=color; ctx.globalAlpha=0.9; ctx.fill();
+      ctx.strokeStyle=color; ctx.lineWidth=1; ctx.stroke();
+      ctx.globalAlpha=1;
+      // Bridge link to bridge point
+      if(relayBridgePt){
+        const bx=relayBridgePt.x*sx, by=relayBridgePt.y*sy;
+        ctx.save();
+        ctx.strokeStyle='rgba(245,158,11,0.4)'; ctx.lineWidth=1;
+        ctx.setLineDash([3,5]);
+        ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(bx,by); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+        // Bridge marker
+        ctx.beginPath(); ctx.arc(bx,by,4,0,Math.PI*2);
+        ctx.strokeStyle='rgba(245,158,11,0.7)'; ctx.lineWidth=1; ctx.stroke();
+        // Small × at bridge point
+        const ms=3;
+        ctx.beginPath(); ctx.moveTo(bx-ms,by-ms); ctx.lineTo(bx+ms,by+ms);
+        ctx.moveTo(bx+ms,by-ms); ctx.lineTo(bx-ms,by+ms);
+        ctx.strokeStyle='rgba(245,158,11,0.9)'; ctx.lineWidth=0.8; ctx.stroke();
+      }
+    } else {
+      ctx.beginPath(); ctx.arc(px,py,2.5,0,Math.PI*2);
+      ctx.fillStyle=color; ctx.globalAlpha=0.9; ctx.fill(); ctx.globalAlpha=1;
+    }
+
+    // ── Target proximity vector
+    if(d.assignedTarget){
+      const t=d.assignedTarget;
+      const dtx=t.x*sx, dty=t.y*sy;
+      const dtDist=dist(px,py,dtx,dty);
+      if(dtDist<PROX_RANGE){
+        const alpha=0.18+0.42*(1-(dtDist/PROX_RANGE));
+        ctx.save();
+        ctx.strokeStyle='rgba(255,255,255,0.55)';
+        ctx.globalAlpha=alpha;
+        ctx.lineWidth=0.7;
+        ctx.setLineDash([3,5]);
+        ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(dtx,dty); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+        drawArrow(ctx, px+(dtx-px)*0.7, py+(dty-py)*0.7, dtx, dty, 'rgba(255,255,255,0.6)', alpha*0.9, 0.8);
+      }
+    }
+
+    // ── Drone index label
+    ctx.fillStyle= isRelayDraw ? 'rgba(245,158,11,0.7)' : 'rgba(255,255,255,0.22)';
+    ctx.font='7px "Share Tech Mono"';
+    ctx.fillText(d.isRelay ? `⬡${d.id}` : d.id, px+4, py-4);
+  }
+}
+
+// ─── DATA STREAM ──────────────────────────────────────────
+let dataTab    = 'matrix';
+let frameCount = 0;
+const DATA_UPDATE_INTERVAL = 8; // update every N frames
+
+function setTab(t){
+  dataTab=t;
+  document.querySelectorAll('.dtab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
+}
+
+function f2(n){return n.toFixed(2);}
+function f3(n){return n.toFixed(3);}
+function pad(s,n,c='0'){s=String(s);while(s.length<n)s=c+s;return s;}
+
+// Convert a float to a "binary vector" string for display
+function floatToBin8(val){
+  // Map float to 0-255 then show as 8-bit
+  const b=Math.round(Math.max(0,Math.min(1,val))*255);
+  return pad(b.toString(2),8);
+}
+
+// Encode position and velocity as compact bit pattern
+function encodeDroneState(d){
+  // normalise pos to [0,1], vel to [-1,1]
+  const nx=d.pos[0]/SW, ny=d.pos[1]/SH;
+  const vx=(d.vel[0]/CFG.engageMaxSpeed+1)/2;
+  const vy=(d.vel[1]/CFG.engageMaxSpeed+1)/2;
+  return floatToBin8(nx)+' '+floatToBin8(ny)+' '+floatToBin8(vx)+' '+floatToBin8(vy);
+}
+
+// Drones within proximity of any target
+function nearTargetDrones(){
+  const result=[];
+  for(const d of drones){
+    for(const t of targets){
+      const dd=dist(d.pos[0],d.pos[1],t.x,t.y);
+      if(dd<PROX_RANGE){result.push({d,t,dd});break;}
+    }
+  }
+  return result;
+}
+
+let eventLog=[];
+let prevLocked=new Set();
+
+function checkEvents(){
+  const nowLocked=new Set(drones.filter(d=>d.locked).map(d=>d.id));
+  for(const id of nowLocked){
+    if(!prevLocked.has(id)){
+      const d=drones.find(x=>x.id===id);
+      eventLog.unshift({type:'LOCK',msg:`D${id} LOCKED → T(${d.assignedTarget?f2(d.assignedTarget.x)+','+f2(d.assignedTarget.y):'?'})`,ts:frameCount});
+    }
+  }
+  for(const id of prevLocked){
+    if(!nowLocked.has(id)) eventLog.unshift({type:'RELEASE',msg:`D${id} RELEASED`,ts:frameCount});
+  }
+  prevLocked=nowLocked;
+  if(eventLog.length>40) eventLog=eventLog.slice(0,40);
+}
+
+function buildMatrixHTML(){
+  const prox=nearTargetDrones();
+  let html='';
+
+  // ── DRONE STATE MATRIX
+  html+=`<div class="ds-section">── DRONE STATE [id|role|px|py|vx|vy|spd]</div>`;
+  for(const d of drones){
+    const speed=mag(d.vel[0],d.vel[1]);
+    const roleClass=d.role;
+    html+=`<div class="ds-row">
+      <span class="k">D${pad(d.id,2)}</span>
+      <span class="v ${roleClass}">${d.role.substring(0,3).toUpperCase()}</span>
+      <span class="v">[${f2(d.pos[0])},${f2(d.pos[1])}]</span>
+      <span class="v">[${f3(d.vel[0])},${f3(d.vel[1])}]</span>
+      <span class="v">${f3(speed)}</span>
+    </div>`;
+  }
+
+  // ── PROXIMITY / TARGET VECTORS
+  if(prox.length){
+    html+=`<div class="ds-section" style="margin-top:6px">── PROXIMITY VECTORS [drone→target dist|bearing]</div>`;
+    for(const {d,t,dd} of prox){
+      const dx=t.x-d.pos[0], dy=t.y-d.pos[1];
+      const bearing=(Math.atan2(dy,dx)*180/Math.PI+360)%360;
+      const tvx=dx/Math.max(dd,1), tvy=dy/Math.max(dd,1);
+      html+=`<div class="ds-row">
+        <span class="k">D${pad(d.id,2)}→T</span>
+        <span class="v">${f2(dd)}px</span>
+        <span class="v">${f2(bearing)}°</span>
+        <span class="v">[${f3(tvx)},${f3(tvy)}]</span>
+      </div>`;
+    }
+  }
+
+  // ── TARGETS
+  if(targets.length){
+    html+=`<div class="ds-section" style="margin-top:6px">── TARGETS [id|px|py|locked]</div>`;
+    targets.forEach((t,i)=>{
+      const engaged=engageAssignments.get(t);
+      const locked=engaged&&engaged.locked;
+      html+=`<div class="ds-row">
+        <span class="k">T${i}</span>
+        <span class="v">[${f2(t.x)},${f2(t.y)}]</span>
+        <span class="v ${locked?'engage':''}">${locked?'LOCKED':'ACTIVE'}</span>
+      </div>`;
+    });
+  }
+
+  // ── CONSENSUS
+  const mean=drones.length?drones.reduce((s,d)=>s+d.state,0)/drones.length:0;
+  const variance=drones.length?drones.reduce((s,d)=>s+(d.state-mean)**2,0)/drones.length:0;
+  html+=`<div class="ds-section" style="margin-top:6px">── CONSENSUS</div>`;
+  html+=`<div class="ds-row"><span class="k">μ</span><span class="v">${f3(mean)}</span><span class="k">σ²</span><span class="v">${f3(variance)}</span></div>`;
+
+  return html;
+}
+
+function buildBinaryHTML(){
+  let html='';
+  html+=`<div class="ds-section">── STATE VECTOR [id·role|px|py|vx|vy] 8bit</div>`;
+  html+=`<div class="ds-section" style="color:rgba(255,255,255,0.13)">px:x/W  py:y/H  vx,vy:vel/maxSpd+1>>1</div>`;
+  for(const d of drones){
+    const roleCode=d.role==='engage'?'10':d.role==='monitor'?'01':d.role==='observe'?'11':'00';
+    const bits=encodeDroneState(d);
+    const roleClass=d.role;
+    html+=`<div class="ds-matrix">
+      <span class="k" style="color:rgba(255,255,255,0.3)">D${pad(d.id,2)}</span>
+      <span class="${roleClass}">${roleCode}</span> <span>${bits}</span>
+    </div>`;
+  }
+
+  const prox=nearTargetDrones();
+  if(prox.length){
+    html+=`<div class="ds-section" style="margin-top:6px">── PROXIMITY BIT-FIELD [drone·target·dist_norm·bearing_norm]</div>`;
+    for(const {d,t,dd} of prox){
+      const distNorm=Math.round((1-Math.min(dd/PROX_RANGE,1))*255);
+      const dx=t.x-d.pos[0],dy=t.y-d.pos[1];
+      const bearing=(Math.atan2(dy,dx)+Math.PI)/(Math.PI*2);
+      const bearingByte=Math.round(bearing*255);
+      html+=`<div class="ds-matrix">
+        <span class="k">D${pad(d.id,2)}▶T</span>
+        <span class="engage">${pad(distNorm.toString(2),8)}</span>
+        <span> </span>
+        <span>${pad(bearingByte.toString(2),8)}</span>
+      </div>`;
+    }
+  }
+  return html;
+}
+
+function buildEventsHTML(){
+  if(!eventLog.length) return '<div class="ds-section">── no events recorded</div>';
+  let html='<div class="ds-section">── EVENT LOG</div>';
+  for(const ev of eventLog){
+    const cls=ev.type==='LOCK'?'ds-event':'ds-event mon';
+    html+=`<div class="${cls}">T${pad(ev.ts,5)} ${ev.msg}</div>`;
+  }
+  return html;
+}
+
+function updateDataStream(){
+  if(frameCount%DATA_UPDATE_INTERVAL!==0)return;
+  checkEvents();
+  const ds=document.getElementById('data-stream');
+  const ts=`<div class="ds-ts">T=${pad(frameCount,6)} &nbsp; mode=${MODE} &nbsp; N=${drones.length}</div>`;
+  let body='';
+  if(dataTab==='matrix')  body=buildMatrixHTML();
+  else if(dataTab==='binary') body=buildBinaryHTML();
+  else body=buildEventsHTML();
+
+  // Keep scroll at bottom unless user has scrolled up
+  const nearBottom=ds.scrollHeight-ds.scrollTop-ds.clientHeight<60;
+  ds.innerHTML=ts+body;
+  if(nearBottom) ds.scrollTop=ds.scrollHeight;
+
+  // frame header
+  document.getElementById('dh-frame').textContent=`T=${pad(frameCount,6)}  N=${drones.length}  TGT=${targets.length}`;
+}
+
+// ─── HUD update ───────────────────────────────────────────
+function updateHUD(){
+  const n=drones.length;
+  document.getElementById('s-drones').textContent=n;
+  document.getElementById('s-targets').textContent=targets.length;
+  if(n>0){
+    document.getElementById('s-speed').textContent=(drones.reduce((s,d)=>s+mag(d.vel[0],d.vel[1]),0)/n).toFixed(1);
+    const mean=drones.reduce((s,d)=>s+d.state,0)/n;
+    const variance=drones.reduce((s,d)=>s+(d.state-mean)**2,0)/n;
+    document.getElementById('conv-bar').style.width=(Math.max(0,1-variance*25)*100).toFixed(0)+'%';
+  }
+  document.getElementById('s-monitor').textContent=drones.filter(d=>d.role==='monitor').length;
+  document.getElementById('s-engage').textContent=drones.filter(d=>d.role==='engage').length;
+  document.getElementById('s-observe').textContent=drones.filter(d=>d.role==='observe').length;
+  const withTarget=drones.filter(d=>d.assignedTarget&&(d.role==='monitor'||d.role==='engage'));
+  const withLOS=withTarget.filter(d=>d.hasLOS);
+  document.getElementById('s-los').textContent=withLOS.length;
+  document.getElementById('s-los-total').textContent=withTarget.length;
+}
+
+// ─── Main loop ────────────────────────────────────────────
+function loop(){
+  frameCount++;
+  update();
+  renderSim();
+  renderVec();
+  updateDataStream();
+  updateHUD();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ─── UI wiring ────────────────────────────────────────────
+const slider=document.getElementById('drone-slider');
+const sliderVal=document.getElementById('drone-count-val');
+slider.addEventListener('input',()=>{N=parseInt(slider.value);sliderVal.textContent=N;initDrones(N);});
+
+const modeMap={'btn-engage':'engage','btn-monitor':'monitor','btn-observe':'observe'};
+function setMode(m){
+  MODE=m;engageAssignments.clear();
+  for(const d of drones)d.resetEngageState();
+  for(const [id,mv] of Object.entries(modeMap))
+    document.getElementById(id).classList.toggle('active',mv===m);
+}
+for(const [id,m] of Object.entries(modeMap))
+  document.getElementById(id).addEventListener('click',()=>setMode(m));
+
+document.getElementById('btn-reset').addEventListener('click',()=>{
+  drones=[];initDrones(N);targets=[];resetObstacles();eventLog=[];
+});
+document.getElementById('btn-clear').addEventListener('click',()=>{
+  targets=[];engageAssignments.clear();for(const d of drones)d.resetEngageState();eventLog=[];
+});
+document.getElementById('btn-sense').addEventListener('click',()=>{
+  showSense=!showSense;document.getElementById('btn-sense').classList.toggle('active',showSense);
+});
+document.getElementById('btn-edges').addEventListener('click',()=>{
+  showEdges=!showEdges;document.getElementById('btn-edges').classList.toggle('active',showEdges);
+});
+
+const tuneSliders=[
+  ['t-alpha','tv-alpha','alpha',3],
+  ['t-sep','tv-sep','sep_w',2],
+  ['t-align','tv-align','align_w',2],
+  ['t-coh','tv-coh','coh_w',2],
+  ['t-sepr','tv-sepr','sepRadius',0],
+  ['t-orb','tv-orb','monitorRadius',0],
+  ['t-tang','tv-tang','monitorTangent',3],
+  ['t-engf','tv-engf','engageForce',3],
+  ['t-espd','tv-espd','engageMaxSpeed',2],
+  ['t-noise','tv-noise','noise',3],
+  ['t-orep','tv-orep','observeRepel',0],
+];
+for(const [sid,vid,key,dp] of tuneSliders){
+  const el=document.getElementById(sid);
+  const vl=document.getElementById(vid);
+  el.addEventListener('input',()=>{const v=parseFloat(el.value);CFG[key]=v;vl.textContent=v.toFixed(dp);});
+}
+
+// ─── Mouse interaction (on sim canvas) ────────────────────
+let draggingObs=null,dragOX=0,dragOY=0,obsStart=null;
+const obsPrev=document.getElementById('obs-preview');
+
+simCanvas.addEventListener('mousedown',(e)=>{
+  e.preventDefault();
+  if(e.button===2){obsStart={x:e.clientX,y:e.clientY};obsPrev.style.display='block';return;}
+  for(const o of obstacles){
+    if(insideRect(e.clientX,e.clientY,o,6)){draggingObs=o;dragOX=e.clientX-o.x;dragOY=e.clientY-o.y;return;}
+  }
+  targets.push({x:e.clientX,y:e.clientY});
+});
+simCanvas.addEventListener('mousemove',(e)=>{
+  if(draggingObs){draggingObs.x=e.clientX-dragOX;draggingObs.y=e.clientY-dragOY;}
+  if(obsStart){
+    const x=Math.min(obsStart.x,e.clientX),y=Math.min(obsStart.y,e.clientY);
+    const w=Math.abs(e.clientX-obsStart.x),h=Math.abs(e.clientY-obsStart.y);
+    Object.assign(obsPrev.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
+  }
+});
+simCanvas.addEventListener('mouseup',(e)=>{
+  if(e.button===2&&obsStart){
+    const x=Math.min(obsStart.x,e.clientX),y=Math.min(obsStart.y,e.clientY);
+    const w=Math.abs(e.clientX-obsStart.x),h=Math.abs(e.clientY-obsStart.y);
+    if(w>12&&h>12)obstacles.push({x,y,w,h});
+    obsStart=null;obsPrev.style.display='none';
+  }
+  draggingObs=null;
+});
+simCanvas.addEventListener('contextmenu',(e)=>e.preventDefault());
+
+document.addEventListener('keydown',(e)=>{
+  const k=e.key.toLowerCase();
+  if(k==='r'){drones=[];initDrones(N);targets=[];resetObstacles();eventLog=[];}
+  if(k==='c'){targets=[];engageAssignments.clear();for(const d of drones)d.resetEngageState();eventLog=[];}
+  if(k==='s'){showSense=!showSense;document.getElementById('btn-sense').classList.toggle('active',showSense);}
+  if(k==='e'){showEdges=!showEdges;document.getElementById('btn-edges').classList.toggle('active',showEdges);}
+  if(k==='1')setMode('engage');
+  if(k==='2')setMode('monitor');
+  if(k==='3')setMode('observe');
+  if(k==='n'){N=Math.min(20,N+1);slider.value=N;sliderVal.textContent=N;initDrones(N);}
+  if(k==='m'){N=Math.max(0,N-1);slider.value=N;sliderVal.textContent=N;initDrones(N);}
+});
+</script>
+</body>
+</html>
